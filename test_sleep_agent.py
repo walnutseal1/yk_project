@@ -10,15 +10,18 @@ import time
 import asyncio
 from datetime import datetime
 
-# Add server path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'server'))
+# Add server path and change to server directory
+project_root = os.path.dirname(os.path.abspath(__file__))
+server_path = os.path.join(project_root, 'server')
+sys.path.insert(0, server_path)
+os.chdir(server_path)
 
-from server.sleep_time.sleeper_agent import SleepTimeAgent
-from server.sleep_time.async_sleeper_agent import AsyncSleepTimeAgent
+from sleep_time.sleeper_agent import SleepTimeAgent
+from sleep_time.async_sleeper_agent import AsyncSleepTimeAgent
 
 def test_sync_sleep_agent():
     """Test the original sync sleep-time agent."""
-    print("🔍 Testing Sync Sleep-Time Agent...")
+    print("Testing Sync Sleep-Time Agent...")
     print("=" * 50)
     
     agent = SleepTimeAgent()
@@ -26,14 +29,14 @@ def test_sync_sleep_agent():
     try:
         # Start the agent
         agent.start()
-        print("✅ Agent started successfully")
+        print("Agent started successfully")
         
         # Test 1: Add simple text task
-        print("\n📝 Test 1: Adding simple text task...")
+        print("\nTest 1: Adding simple text task...")
         agent.add_task("Summarize recent conversation about AI optimization")
         
         # Test 2: Add conversation messages
-        print("📝 Test 2: Adding conversation messages...")
+        print("Test 2: Adding conversation messages...")
         messages = [
             {"role": "user", "content": "Hello, can you help me with optimization?"},
             {"role": "assistant", "content": "Sure! I'd be happy to help with optimization."},
@@ -42,35 +45,35 @@ def test_sync_sleep_agent():
         agent.go(messages)
         
         # Test 3: Check status
-        print("📊 Test 3: Checking agent status...")
+        print("Test 3: Checking agent status...")
         status = agent.get_status()
         print(f"   State: {status['state']}")
         print(f"   Queue Size: {status['queue_size']}")
         print(f"   Main AI Active: {status['main_ai_active']}")
         
         # Test 4: Simulate main AI activity
-        print("🧠 Test 4: Simulating main AI activity...")
+        print("Test 4: Simulating main AI activity...")
         agent.notify_main_ai_start()
         time.sleep(2)
         agent.notify_main_ai_end()
         
         # Let it process for a bit
-        print("⏳ Letting agent process for 10 seconds...")
+        print("Letting agent process for 10 seconds...")
         time.sleep(10)
         
         # Final status check
         final_status = agent.get_status()
-        print(f"\n📊 Final Status:")
+        print(f"\nFinal Status:")
         print(f"   State: {final_status['state']}")
         print(f"   Queue Size: {final_status['queue_size']}")
         
     except Exception as e:
-        print(f"❌ Error during sync testing: {e}")
+        print(f"Error during sync testing: {e}")
         import traceback
         traceback.print_exc()
     finally:
         agent.stop()
-        print("🛑 Sync agent stopped")
+        print("Sync agent stopped")
 
 async def test_async_sleep_agent():
     """Test the new async sleep-time agent."""
@@ -162,7 +165,7 @@ def test_memory_integration():
     
     try:
         # Test memory tools directly
-        import server.memory.memtools as mem
+        import memory.memtools as mem
         
         print("📁 Testing memory initialization...")
         mem.init_recall_db()
@@ -181,9 +184,9 @@ def test_memory_integration():
 
 async def main():
     """Run all sleep agent tests."""
-    print("🧪 Sleep-Time Agent Test Suite")
+    print("Sleep-Time Agent Test Suite")
     print("=" * 60)
-    print(f"🕐 Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
     # Test 1: Memory Integration
     test_memory_integration()
@@ -197,15 +200,15 @@ async def main():
     # Test 4: Performance Notes
     test_performance_comparison()
     
-    print(f"\n🏁 All tests completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"\nAll tests completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 60)
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\n⏹️  Tests interrupted by user")
+        print("\nTests interrupted by user")
     except Exception as e:
-        print(f"\n💥 Test suite failed: {e}")
+        print(f"\nTest suite failed: {e}")
         import traceback
         traceback.print_exc()

@@ -4,7 +4,7 @@ import json
 import time
 import os
 import psutil
-from typing import List, Dict, Optional, AsyncIterator, Union
+from typing import List, Dict, Optional, AsyncIterator, Union, Any
 from cachetools import TTLCache
 from asyncio_throttle import Throttler
 import hashlib
@@ -468,7 +468,8 @@ class AsyncLLM:
                 ):
                     # Process thinking tags if needed
                     if chunk.get("type") == "content":
-                        yield from self._process_chunk(chunk["delta"])
+                        for sub_chunk in self._process_chunk(chunk["delta"]):
+                            yield sub_chunk
                     else:
                         yield chunk
             else:

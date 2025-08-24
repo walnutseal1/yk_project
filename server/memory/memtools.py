@@ -310,7 +310,7 @@ def get_core_memory() -> str:
         try:
             last_updated_dt = datetime.datetime.fromisoformat(last_updated_str.replace("Z", "+00:00"))
         except Exception:
-            last_updated_dt = datetime(1970, 1, 1)
+            last_updated_dt = datetime.datetime(1970, 1, 1)
 
         last_modified_times.append(last_updated_dt)
 
