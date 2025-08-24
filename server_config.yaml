@@ -43,6 +43,6 @@ vector_dir: memory/vector
 cache_file: memory/vector/.cache.json
 context_dir: memory/context_save.json
 recall_dir: memory/recall.db
-working_dir: C:/users/walnu/ai_playground
+working_dir: ./workspace
 
 embed_model: ollama/hf.co/Qwen/Qwen3-Embedding-4B-GGUF

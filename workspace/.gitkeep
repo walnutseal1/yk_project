@@ -1,0 +1,3 @@
+# Workspace directory for AI file operations
+# This directory is used as a universal working directory for file tools
+# Replace the hardcoded path in server_config.yaml

@@ -176,6 +176,9 @@ temperature: 0.7
 # Memory configuration  
 sleep_agent_model: ollama/hf.co/subsectmusic/qwriko3-4b-instruct-2507:Q4_K_M
 sleep_agent_context: 2048
+
+# Universal working directory (cross-platform compatible)
+working_dir: ./workspace
 ```
 
 ### **Available Models**
