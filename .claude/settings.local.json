@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install:*)",
+      "Bash(ollama pull:*)",
+      "Bash(git add:*)",
+      "Bash(git remote add:*)",
+      "Bash(python:*)",
+      "Bash(git push:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

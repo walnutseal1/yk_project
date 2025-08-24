@@ -1,12 +1,16 @@
 import sys
+from PyQt6.QtWidgets import *
+from PyQt6.QtCore import *
+from PyQt6.QtGui import *
+
+# Fix Qt high DPI scaling issue - MUST be called before QApplication
+QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+
 import requests
 import json
 import yaml
 import socketio
 from datetime import datetime
-from PyQt6.QtWidgets import *
-from PyQt6.QtCore import *
-from PyQt6.QtGui import *
 try:
     # When run from the 'client' directory, client_config.yaml is in the parent directory
     with open('../client_config.yaml', 'r') as f:

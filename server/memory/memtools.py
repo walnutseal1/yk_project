@@ -1,6 +1,7 @@
 import os
 import json
 import datetime
+from datetime import timezone
 import utils.ai as ai
 import math
 import sqlite3
@@ -184,7 +185,7 @@ def vector_memory_edit(label: str, new_text: str, old_text: str = "") -> str:
             "label": label,
             "content": new_text.strip(),
             "metadata": {
-                "last_updated": datetime.datetime.now(datetime.UTC).isoformat() + "Z",
+                "last_updated": datetime.datetime.now(timezone.utc).isoformat() + "Z",
                 "current_chars": len(new_text.strip()),
                 "max_chars": 5000
             }
@@ -216,7 +217,7 @@ def vector_memory_edit(label: str, new_text: str, old_text: str = "") -> str:
 
     # Save updated block
     data["content"] = content
-    data["metadata"]["last_updated"] = datetime.datetime.now(datetime.UTC).isoformat() + "Z"
+    data["metadata"]["last_updated"] = datetime.datetime.now(timezone.utc).isoformat() + "Z"
     data["metadata"]["current_chars"] = current_chars
     data["metadata"]["max_chars"] = max_chars
 
@@ -268,7 +269,7 @@ def core_memory_edit(label: str, new_text: str, old_text: str = "") -> str:
         return f"Failed: Updated content exceeds max character limit of {max_chars}."
     # Save updated block
     data["content"] = content
-    data["metadata"]["last_updated"] = datetime.datetime.now(datetime.UTC).isoformat() + "Z"
+    data["metadata"]["last_updated"] = datetime.datetime.now(timezone.utc).isoformat() + "Z"
     data["metadata"]["current_chars"] = current_chars
     data["metadata"]["max_chars"] = max_chars
 
@@ -283,7 +284,7 @@ def get_core_memory() -> str:
     """
 
     # Get current UTC time string
-    now_utc = datetime.datetime.now(datetime.UTC)
+    now_utc = datetime.datetime.now(timezone.utc)
     now_str = now_utc.strftime("%Y-%m-%d %I:%M:%S %p UTC+0000")
 
     # List all core memory files
@@ -309,7 +310,7 @@ def get_core_memory() -> str:
         try:
             last_updated_dt = datetime.datetime.fromisoformat(last_updated_str.replace("Z", "+00:00"))
         except Exception:
-            last_updated_dt = datetime(1970, 1, 1)
+            last_updated_dt = datetime.datetime(1970, 1, 1)
 
         last_modified_times.append(last_updated_dt)
 
