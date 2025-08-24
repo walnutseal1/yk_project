@@ -1,0 +1,10 @@
+ollama-python
+requests
+PyYAML
+bs4
+rich
+pyqt6
+Flask-SocketIO
+python-socketio[client]
+eventlet
+duckduckgo-search

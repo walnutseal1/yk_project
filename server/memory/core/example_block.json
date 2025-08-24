@@ -1,0 +1,10 @@
+{
+  "label": "example_block",
+  "description": "Stores user preferences related to AI learning topics.",
+  "content": "User mentioned interest in reinforcement learning and robotics. 🧠. Is planning to try fine-tuning phi4-mini to not sound robotic.",
+  "metadata": {
+    "last_updated": "2025-07-21T14:45:00Z",
+    "max_chars": 1000,
+    "current_chars": 88
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "label": "to_do",
+  "content": "Add text-to-speech and speech-to-text functionality using Piper and Whisper libraries.",
+  "metadata": {
+    "last_updated": "2025-07-23T02:12:15.685500+00:00Z",
+    "current_chars": 86,
+    "max_chars": 5000
+  }
+}

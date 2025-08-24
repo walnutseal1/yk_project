@@ -1,0 +1,10 @@
+{
+  "label": "to_do",
+  "description": "Stores things I (as the assistant) should do.",
+  "content": "I should store tasks I need to do here. Currently, there is nothing.",
+  "metadata": {
+    "last_updated": "2025-07-21T14:45:00Z",
+    "max_chars": 1000,
+    "current_chars": 88
+  }
+}

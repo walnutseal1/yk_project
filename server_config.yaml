@@ -1,0 +1,48 @@
+# config.yaml
+
+# Main chatbot config
+# main_model: ollama/qwen3:4b
+main_model: ollama/hf.co/subsectmusic/qwriko3-4b-instruct-2507:Q4_K_M
+prompt_file: prompts/qwriko.txt
+max_tokens: 16384
+
+# Config for external tools
+# Specify which actions require user approval.
+approval_required:
+  read_file: false
+  read_many_files: false
+  list_directory: false
+  search_file_content: false
+  glob: false
+  write_file: true
+  replace_in_file: true
+  edit_file: true
+  web_search: false
+  http_request: true
+  fetch_page_content: true
+  find_links_on_page: true
+  download_file: true
+  manage_session: false
+
+# Other
+use_web: True
+use_filesystem: False
+
+# Sleep Time Agent Configs
+sleep_agent_model: ollama/qwen3:4b
+sleep_agent_context: 2048
+sleep_agent_message_trigger: 1
+sleep_agent_prompt_path: prompts/sleep_agent_prompt.txt
+min_sleep_interval: 30
+max_sleep_interval: 300
+pause_delay_after_main: 15
+
+# Memory Configs
+core_dir: memory/core
+vector_dir: memory/vector
+cache_file: memory/vector/.cache.json
+context_dir: memory/context_save.json
+recall_dir: memory/recall.db
+working_dir: C:/users/walnu/ai_playground
+
+embed_model: ollama/hf.co/Qwen/Qwen3-Embedding-4B-GGUF

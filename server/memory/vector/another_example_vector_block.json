@@ -1,0 +1,9 @@
+{
+  "label": "another_example_vector_block",
+  "content": "This is another testing block. The user's favorite number is 67. The secret word is Banana.",
+  "metadata": {
+    "last_updated": "2025-07-22T17:22:15.984109+00:00Z",
+    "current_chars": 64,
+    "max_chars": 5000
+  }
+}

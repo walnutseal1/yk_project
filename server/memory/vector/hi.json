@@ -1,0 +1,9 @@
+{
+  "label": "hi",
+  "content": "Hi. You should explain why you are calling vector search on this, because this shouldn't of happened. 'Hi' is not something you should be calling vector search on, because it is small talk. Explain to the user how this happend.",
+  "metadata": {
+    "last_updated": "2025-07-25T00:51:37.601899+00:00Z",
+    "current_chars": 227,
+    "max_chars": 5000
+  }
+}

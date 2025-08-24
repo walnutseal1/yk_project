@@ -1,0 +1,9 @@
+{
+  "label": "tool_calling",
+  "content": "I store tasks and results from tool calls here.",
+  "metadata": {
+    "last_updated": "2025-07-25T23:07:16.433928+00:00Z",
+    "current_chars": 47,
+    "max_chars": 5000
+  }
+}
