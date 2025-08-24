@@ -65,48 +65,13 @@ class LLM:
             raise
 
     def _stream_wrapper(self, query_function, messages):
-        """Wraps a query function with a pinger and threading."""
-        import threading
-        import time
-        from queue import Queue, Empty
-
-        q = Queue()
-        stop_event = threading.Event()
-
-        def pinger():
-            """Pings the queue every 10 seconds."""
-            while not stop_event.is_set():
-                time.sleep(10)
-                if not stop_event.is_set():
-                    q.put({"type": "ping", "delta": ""})
-
-        def worker():
-            """Calls the actual query function and puts results in the queue."""
-            try:
-                for chunk in query_function(messages):
-                    q.put(chunk)
-            except Exception as e:
-                print(f"[AI DEBUG] Error in worker thread: {e}")
-                q.put({"type": "error", "delta": str(e)})
-            finally:
-                q.put(None)  # Signal completion
-
-        pinger_thread = threading.Thread(target=pinger)
-        worker_thread = threading.Thread(target=worker)
-
-        pinger_thread.start()
-        worker_thread.start()
-
+        """Wraps a query function with proper streaming - no unnecessary threading."""
         try:
-            while True:
-                chunk = q.get()
-                if chunk is None:
-                    break
+            for chunk in query_function(messages):
                 yield chunk
-        finally:
-            stop_event.set()
-            pinger_thread.join()
-            worker_thread.join()
+        except Exception as e:
+            print(f"[AI DEBUG] Error in query function: {e}")
+            yield {"type": "error", "delta": str(e)}
 
     def _process_chunk(self, content: Optional[str]) -> Iterator[Dict[str, Union[str, dict]]]:
         """
@@ -177,7 +142,9 @@ class LLM:
                     tool_calls = chunk["message"].get("tool_calls")
 
                     if content:
-                        yield from self._process_chunk(content)
+                        # Process content directly without character splitting
+                        print(f"[AI DEBUG] Raw chunk from LLM: {{'type': 'content', 'delta': '{content}'}}")
+                        yield {"type": "content", "delta": content}
                     
                     if tool_calls:
                         for tool_call in tool_calls:
