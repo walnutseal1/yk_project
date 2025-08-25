@@ -459,7 +459,7 @@ class SleepTimeAgent:
             
             reasoning_loop_active = True
             loop_count = 0
-            max_loops = 10 # Maximum number of iterations for the reasoning loop
+            max_loops = 3 # Reduced to prevent infinite thinking loops
             
             # Main reasoning loop: LLM generates response, potentially calls tools, and loop continues if tools are called.
             while reasoning_loop_active and loop_count < max_loops:
@@ -485,8 +485,7 @@ class SleepTimeAgent:
                         if processed_type == "content":
                             res_for_assistant_message += processed_delta
                         elif processed_type == "thinking":
-                            # Print thinking content for every chunk (spam mode)
-                            print(f"[SLEEP AGENT] 🧠 Thinking chunk: {processed_delta[:50]}...")
+                            # Accumulate thinking content (no spam)
                             thinking_buffer += processed_delta
                         elif chunk_type == "tool_call":
                             tool_calls.append(processed_delta)
