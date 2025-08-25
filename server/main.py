@@ -31,6 +31,7 @@ import utils.auth as auth
 import ipi.webtools as webtools
 import ipi.fstools as fstools
 from sleep_time.sleeper_agent import SleepTimeAgent
+from utils.ollama_optimizer import OllamaOptimizer
 
 app = Flask(__name__)
 CORS(app)
@@ -716,6 +717,12 @@ def main():
     print("=" * 60)
     print("🤖 Enhanced AI Assistant Backend")
     print("=" * 60)
+    
+    # Apply Ollama optimizations FIRST
+    print("⚡ Applying Ollama optimizations...")
+    ollama_opt = OllamaOptimizer()
+    ollama_opt.apply_environment_optimizations()
+    
     print("Backend will run on http://localhost:5000")
     print()
     print("Available endpoints:")
@@ -735,6 +742,10 @@ def main():
         print("AI system initialized successfully")
     else:
         print("⚠️  AI system initialization failed - using fallback mode")
+    
+    # Show optimization status
+    print("\n⚡ Ollama Optimization Status:")
+    ollama_opt.print_optimization_report()
     
     print("🔥 Starting Flask-SocketIO server...")
     print("Press Ctrl+C to stop the server (will also stop GUI)")
