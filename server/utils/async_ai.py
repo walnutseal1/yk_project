@@ -19,7 +19,7 @@ os.environ['OLLAMA_KV_CACHE_TYPE'] = 'f16'          # Full precision KV cache
 os.environ['OLLAMA_NUM_PARALLEL'] = '2'             # Parallel requests
 os.environ['OLLAMA_MAX_LOADED_MODELS'] = '2'        # Allow multiple models
 os.environ['OLLAMA_KEEP_ALIVE'] = '10m'             # Keep models loaded
-os.environ['OLLAMA_HOST'] = '0.0.0.0:11434'        # Bind to all interfaces
+os.environ['OLLAMA_HOST'] = '127.0.0.1:11434'      # Local host binding
 
 class PerformanceMonitor:
     """Monitor system performance for dynamic optimization."""
