@@ -229,7 +229,10 @@ class THCFCompressor:
         ):
             if chunk.get("type") == "content":
                 full_response_content.append(chunk["delta"])
-            # Handle other chunk types if necessary, e.g., "thinking", "tool_call"
+            elif chunk.get("type") == "thinking":
+                # Handle thinking chunks from models like deepseek-r1
+                print(f"[THCF COMPRESSOR THINKING] {chunk['delta']}")
+            # Handle other chunk types if necessary, e.g., "tool_call"
         
         compressed_text = "".join(full_response_content).strip()
         return self._parse_compressed_messages(compressed_text)

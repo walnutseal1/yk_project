@@ -3,6 +3,17 @@ import requests
 import json
 from typing import List, Dict, Optional, Iterator, Union
 
+# =============================================================================
+# OLLAMA PERFORMANCE OPTIMIZATIONS 
+# =============================================================================
+
+# Set optimal Ollama environment variables for consistent performance
+os.environ['OLLAMA_FLASH_ATTENTION'] = '1'           # Enable flash attention
+os.environ['OLLAMA_KV_CACHE_TYPE'] = 'f16'          # Full precision KV cache  
+os.environ['OLLAMA_NUM_PARALLEL'] = '2'             # Parallel requests
+os.environ['OLLAMA_MAX_LOADED_MODELS'] = '2'        # Allow multiple models
+os.environ['OLLAMA_KEEP_ALIVE'] = '10m'             # Keep models loaded
+
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -21,7 +32,18 @@ class LLM:
         if "/" not in model:
             raise ValueError("Model format must be 'provider/model_name'")
         
-        self.provider, self.model_name = model.split("/", 1)
+        # Split on first slash to get provider
+        self.provider, model_path = model.split("/", 1)
+        
+        # Special handling for Ollama models - preserve the full model path
+        if self.provider == "ollama":
+            # For Ollama, the model_path can contain additional slashes (e.g., hf.co/subsectmusic/model:tag)
+            # We need to preserve the full model path as Ollama expects it
+            self.model_name = model_path
+        else:
+            # For other providers, use the original split
+            self.model_name = model_path
+        
         print(f"[AI DEBUG] Provider: {self.provider}, Model: {self.model_name}")
         
         self.tools = tools
@@ -147,9 +169,8 @@ class LLM:
                     tool_calls = chunk["message"].get("tool_calls")
 
                     if content:
-                        # Process content through thinking tag processor
-                        print(f"[AI DEBUG] Raw chunk from LLM: '{content[:50]}{'...' if len(content) > 50 else ''}'")
-                        yield from self._process_chunk(content)
+                        # Process content directly without character splitting (original behavior)
+                        yield {"type": "content", "delta": content}
                     
                     if tool_calls:
                         for tool_call in tool_calls:
@@ -169,7 +190,7 @@ class LLM:
             print("[AI DEBUG] llama-cpp import successful")
         except ImportError:
             error_msg = "llama-cpp-python is not installed. Please run 'pip install llama-cpp-python'."
-            print(f"[AI DEBUG] Import error: {error_msg}")
+            print(f"[AI DEBUG] Error: {error_msg}")
             raise ImportError(error_msg)
 
         if self.tools:
@@ -455,14 +476,17 @@ def embed(model: str, message: str) -> list[float]:
     
     if "/" not in model:
         raise ValueError("Model format: 'provider/model'")
-    provider, model_name = model.split("/", 1)
+    
+    # Split on first slash to get provider
+    provider, model_path = model.split("/", 1)
     
     if provider == "ollama":
         try:
             import ollama
         except ImportError:
             raise ImportError("Install Ollama: pip install ollama")
-        result = ollama.embeddings(model=model_name, prompt=message)
+        # For Ollama, use the full model path (e.g., hf.co/subsectmusic/model:tag)
+        result = ollama.embeddings(model=model_path, prompt=message)
         return result["embedding"]
     
     elif provider == "llama-cpp":
@@ -470,10 +494,10 @@ def embed(model: str, message: str) -> list[float]:
             from llama_cpp import Llama
         except ImportError:
             raise ImportError("Install llama-cpp-python: pip install llama-cpp-python")
-        if model_name not in _llama_models:
-            print(f"Loading model: {model_name}")
-            _llama_models[model_name] = Llama(model_path=model_name, verbose=False, n_ctx=2048)
-        llm = _llama_models[model_name]
+        if model_path not in _llama_models:
+            print(f"Loading model: {model_path}")
+            _llama_models[model_path] = Llama(model_path=model_path, verbose=False, n_ctx=2048)
+        llm = _llama_models[model_path]
         return llm.embed(message)
         
     else:

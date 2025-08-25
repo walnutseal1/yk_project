@@ -1,6 +1,13 @@
 import eventlet
 eventlet.monkey_patch()
 
+# Fix Windows console encoding for unicode support
+import sys
+import os
+if os.name == 'nt':  # Windows
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+
 # Don't run this by itself. Launch run.py instead.
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
@@ -39,6 +46,8 @@ try:
     with open('../server_config.yaml', 'r') as f:
         config = yaml.safe_load(f)
     
+    print(f"[DEBUG] Config loaded successfully: {config}")
+    
     MAIN_MODEL = config['main_model']
     CONTEXT_DIR = config['context_dir']
     MAX_TOKENS = config['max_tokens']
@@ -46,8 +55,13 @@ try:
     USE_FILESYSTEM = config['use_filesystem']
     PROMPT_DIR = config['prompt_file']
     SLEEP_AGENT_MESSAGE_TRIGGER = config.get('sleep_agent_message_trigger', 0)
+    
+    print(f"[DEBUG] MAIN_MODEL set to: {MAIN_MODEL}")
+    print(f"[DEBUG] CONTEXT_DIR set to: {CONTEXT_DIR}")
+    print(f"[DEBUG] MAX_TOKENS set to: {MAX_TOKENS}")
+    
 except FileNotFoundError:
-    print("⚠️  Warning: config.yaml not found. Using default values.")
+    print("Warning: server_config.yaml not found. Using default values.")
     MAIN_MODEL = "gpt-4"  # Default model
     CONTEXT_DIR = "context"  # Default context directory
     MAX_TOKENS = 8000  # Default max tokens
@@ -70,7 +84,7 @@ def load_prompt(file_path: str) -> str:
         with open(file_path, 'r', encoding='utf-8') as f:
             return f.read()
     except FileNotFoundError:
-        print(f"⚠️  Warning: Could not load prompt from {file_path}")
+        print(f"Warning: Could not load prompt from {file_path}")
         return ""
 
 def serialize_obj(obj):
@@ -147,13 +161,18 @@ def initialize_ai_system():
         if SLEEP_AGENT_MESSAGE_TRIGGER > 0:
             sleep_agent = SleepTimeAgent()
             sleep_agent.start()
-            print("✅ SleepTime agent initialized and started.")
+            print("SleepTime agent initialized and started.")
 
         # Initialize tool handler
         handler = ToolCallHandler()
         handler.register_tool(roll_dice)
-        if sleep_agent:
-            handler.register_tool(mem.memory_search)
+        
+        # Register comprehensive memory tools for both main AI and sleep agent
+        handler.register_tool(mem.memory_search)
+        handler.register_tool(mem.vector_get)
+        handler.register_tool(mem.vector_memory_edit)
+        handler.register_tool(mem.core_memory_edit)
+        
         # Register fstools
         if USE_FILESYSTEM:
             handler.register_tool(fstools.write_file)
@@ -177,11 +196,11 @@ def initialize_ai_system():
             # handler.register_tool(webtools.manage_session)
         
         
-        print("✅ AI system initialized successfully")
+        print("AI system initialized successfully")
         return True
         
     except Exception as e:
-        print(f"❌ Failed to initialize AI system: {e}")
+        print(f"Failed to initialize AI system: {e}")
         return False
 
 #=============================================================================================================================================================================================================
@@ -250,7 +269,6 @@ class EnhancedAILLM:
                 # Use the new LLM class to query
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] Assistant: ")
                 for chunk in self.llm.query(current_system_prompt + context):
-                    print(f"[AI DEBUG] Raw chunk from LLM: {chunk}") # New debug line
                     chunk_type = chunk.get("type")
                     delta = chunk.get("delta")
                     
@@ -271,6 +289,15 @@ class EnhancedAILLM:
                         yield {
                             'type': 'thinking',
                             'content': thinking_content,
+                            'is_complete': False
+                        }
+                    elif chunk_type == "thinking":
+                        # Handle thinking chunks from models like deepseek-r1
+                        # Don't print to console, but could yield separately if needed
+                        print(f"[THINKING] {delta}")
+                        yield {
+                            'type': 'thinking',
+                            'content': delta,
                             'is_complete': False
                         }
                     elif chunk_type == "tool_call":
@@ -333,7 +360,16 @@ class EnhancedAILLM:
                     if len(user_message_indices) >= SLEEP_AGENT_MESSAGE_TRIGGER:
                         start_index = user_message_indices[-SLEEP_AGENT_MESSAGE_TRIGGER]
                         last_n_messages = context[start_index:]
-                        sleep_agent.go(last_n_messages)
+                        
+                        # Also provide current core memory context for better integration
+                        current_core_memory = mem.get_core_memory()
+                        enhanced_context = {
+                            'messages': last_n_messages,
+                            'core_memory': current_core_memory,
+                            'timestamp': datetime.now().isoformat()
+                        }
+                        
+                        sleep_agent.go(enhanced_context)
                         self.message_counter = 0
 
             yield {
@@ -465,16 +501,28 @@ def get_history():
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
-    global gui_process
+    global gui_process, sleep_agent
     
     gui_running = gui_process is not None and gui_process.poll() is None
+    
+    # Get sleep agent status if available
+    sleep_agent_status = None
+    if sleep_agent:
+        try:
+            sleep_agent_status = sleep_agent.get_status()
+        except Exception as e:
+            sleep_agent_status = {'error': str(e)}
     
     return jsonify({
         'status': 'online',
         'timestamp': datetime.now().isoformat(),
         'streaming_support': True,
         'ai_system_initialized': llm.ai_initialized,
-        'gui_status': 'inactive'
+        'gui_status': 'inactive',
+        'sleep_agent': {
+            'initialized': sleep_agent is not None,
+            'status': sleep_agent_status
+        }
     })
 
 @app.route('/clear', methods=['POST'])
@@ -539,6 +587,130 @@ def sleep_agent_status():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/set_model', methods=['POST'])
+def set_model():
+    """Set the current model for chat"""
+    global MAIN_MODEL
+    try:
+        data = request.get_json()
+        new_model = data.get('model')
+        
+        if not new_model:
+            return jsonify({'error': 'No model specified'}), 400
+            
+        # Update the global model
+        old_model = MAIN_MODEL
+        MAIN_MODEL = new_model
+        
+        # Reinitialize the ChatHandler's LLM
+        initialize_ai_system()
+        
+        return jsonify({
+            'success': True,
+            'old_model': old_model,
+            'new_model': new_model,
+            'message': f'Model switched from {old_model} to {new_model}'
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'success': False
+        }), 500
+
+@app.route('/set_sleep_model', methods=['POST'])
+def set_sleep_model():
+    """Set the current model for sleep agent"""
+    global sleep_agent
+    try:
+        data = request.get_json()
+        new_model = data.get('model')
+        
+        if not new_model:
+            return jsonify({'error': 'No model specified'}), 400
+        
+        # Update the config for sleep agent
+        config_path = 'server_config.yaml'
+        try:
+            with open(config_path, 'r') as f:
+                import yaml
+                config = yaml.safe_load(f)
+            
+            old_model = config.get('sleep_agent_model', 'unknown')
+            config['sleep_agent_model'] = new_model
+            
+            # Write updated config back
+            with open(config_path, 'w') as f:
+                yaml.dump(config, f, default_flow_style=False)
+                
+            # Reinitialize sleep agent with new model
+            if sleep_agent:
+                sleep_agent.stop()
+                sleep_agent = SleepTimeAgent()
+                sleep_agent.start()
+            
+            return jsonify({
+                'success': True,
+                'old_model': old_model,
+                'new_model': new_model,
+                'message': f'Sleep agent model switched from {old_model} to {new_model}'
+            })
+        
+        except Exception as config_error:
+            return jsonify({
+                'error': f'Failed to update config: {str(config_error)}',
+                'success': False
+            }), 500
+        
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'success': False
+        }), 500
+
+@app.route('/sleep_agent/trigger', methods=['POST'])
+def trigger_sleep_agent():
+    """Manually trigger the sleep agent to process current context"""
+    global sleep_agent
+    
+    if not sleep_agent:
+        return jsonify({'error': 'sleep time agent not initialized'}), 500
+    
+    try:
+        data = request.get_json() or {}
+        force_trigger = data.get('force', False)
+        
+        if force_trigger or SLEEP_AGENT_MESSAGE_TRIGGER > 0:
+            # Get current context and core memory
+            current_core_memory = mem.get_core_memory()
+            
+            # Get recent messages (last 5 for manual trigger)
+            recent_messages = context[-10:] if len(context) > 10 else context
+            
+            enhanced_context = {
+                'messages': recent_messages,
+                'core_memory': current_core_memory,
+                'timestamp': datetime.now().isoformat(),
+                'manual_trigger': True
+            }
+            
+            sleep_agent.go(enhanced_context)
+            
+            return jsonify({
+                'success': True,
+                'message': 'Sleep agent triggered successfully',
+                'context_size': len(recent_messages),
+                'timestamp': datetime.now().isoformat()
+            })
+        else:
+            return jsonify({
+                'error': 'Sleep agent not configured to auto-trigger',
+                'message': 'Set sleep_agent_message_trigger > 0 in config to enable auto-triggering'
+            }), 400
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 def main():
     print("=" * 60)
@@ -553,11 +725,14 @@ def main():
     print("  POST /clear - Clear conversation history")
     print("  GET  /memory/core - Get core memory")
     print("  POST /console - Console mode commands")
+    print("  GET  /sleep_agent/status - Get sleep agent status")
+    print("  POST /sleep_agent/trigger - Manually trigger sleep agent")
+    print("  POST /set_sleep_model - Change sleep agent model")
     print("  Websocket events: 'send_message', 'stream_chunk', 'error'")
     print()
     
     if llm.ai_initialized:
-        print("✅ AI system initialized successfully")
+        print("AI system initialized successfully")
     else:
         print("⚠️  AI system initialization failed - using fallback mode")
     

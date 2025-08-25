@@ -4,7 +4,7 @@ import queue
 import json
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Iterator, Union
 from dataclasses import dataclass
 import yaml
 
@@ -27,7 +27,7 @@ try:
     SLEEP_AGENT_PROMPT_PATH = config.get('sleep_agent_prompt_path', 'prompts/sleep_agent_prompt.txt')
 
 except FileNotFoundError:
-    print("⚠️  Warning: config.yaml not found. Using default values for SleepTimeAgent.")
+    print("⚠️  Warning: server_config.yaml not found. Using default values for SleepTimeAgent.")
     SLEEP_AGENT_MODEL = "gpt-4"
     SLEEP_AGENT_CONTEXT = 2048
     MIN_SLEEP_INTERVAL = 30
@@ -120,6 +120,7 @@ class SleepTimeAgent:
         self.shutdown_event = threading.Event() # Event to signal agent shutdown
         self.state_lock = threading.Lock() # Lock to protect concurrent access to agent state
         self.context = [] # Initialize persistent context for the agent
+        self._is_thinking = False # Flag to track if we are currently in a thinking chunk
         
         print("Sleep-time agent initialized")
     
@@ -227,6 +228,19 @@ class SleepTimeAgent:
         
         print(f"Sleep-time agent stopped.")
     
+    def get_main_ai_context(self):
+        """
+        Get the current context from the main AI system for better integration.
+        This allows the sleep agent to understand what the main AI is working with.
+        """
+        try:
+            # Get current core memory to understand the main AI's current state
+            core_memory = mem.get_core_memory()
+            return core_memory
+        except Exception as e:
+            print(f"Could not get main AI context: {e}")
+            return ""
+    
     def notify_main_ai_start(self):
         """
         Notifies the sleep time agent that the main AI has started processing.
@@ -247,10 +261,26 @@ class SleepTimeAgent:
     
     def go(self, task_input: Any):
         """
-        Processes input, either as plain text or a list of message dictionaries,
-        and adds it to the agent's task queue.
+        Processes input, either as plain text, a list of message dictionaries,
+        or an enhanced context object with messages and core memory.
         """
-        if isinstance(task_input, list) and all(isinstance(item, dict) for item in task_input):
+        if isinstance(task_input, dict) and 'messages' in task_input:
+            # Enhanced context format from main AI
+            messages = task_input['messages']
+            core_memory = task_input.get('core_memory', '')
+            timestamp = task_input.get('timestamp', '')
+            
+            # Create a comprehensive task that includes both messages and core memory
+            enhanced_task = f"Main AI Context Update - {timestamp}\n\nCore Memory State:\n{core_memory}\n\nRecent Messages:\n"
+            for msg in messages:
+                role = msg.get('role', 'unknown')
+                content = msg.get('content', '')[:200]  # Limit content length
+                enhanced_task += f"{role}: {content}\n"
+            
+            self.add_task(enhanced_task)
+            print("Added enhanced context task to queue.")
+            
+        elif isinstance(task_input, list) and all(isinstance(item, dict) for item in task_input):
             # Input is a list of message dictionaries
             messages_text = "\n".join([f"{msg.get('role')}: {msg.get('content', '')[:100]}"
                                      for msg in task_input])
@@ -261,7 +291,7 @@ class SleepTimeAgent:
             self.add_task(task_input)
             print("Added text to task queue.")
         else:
-            print(f"Warning: Unsupported input type for go function: {type(task_input)}. Input must be a string or a list of dictionaries.")
+            print(f"Warning: Unsupported input type for go function: {type(task_input)}. Input must be a string, list of dictionaries, or enhanced context object.")
     
     def add_task(self, data: Any):
         """
@@ -378,13 +408,44 @@ class SleepTimeAgent:
                                                                         # It could jump quickly. Consider a more linear or exponential backoff.
         return base_sleep
     
+    def _process_chunk(self, content: Optional[str]) -> Iterator[Dict[str, Union[str, dict]]]:
+        """
+        Processes a chunk of text, handling <think> tags.
+        Same logic as the main AI system.
+        """
+        if content is None:
+            return
+
+        while content:
+            if not self._is_thinking:
+                think_start = content.find("<think>")
+                if think_start != -1:
+                    # Yield content before the think tag
+                    if think_start > 0:
+                        yield {"type": "content", "delta": content[:think_start]}
+                    content = content[think_start + len("<think>"):]
+                    self._is_thinking = True
+                    print(f"[SLEEP AGENT] 🧠 Entered thinking mode")
+                else:
+                    yield {"type": "content", "delta": content}
+                    content = ""
+            else: # We are in "thinking" mode
+                think_end = content.find("</think>")
+                if think_end != -1:
+                    # Yield thinking content
+                    if think_end > 0:
+                        yield {"type": "thinking", "delta": content[:think_end]}
+                    content = content[think_end + len("</think>"):]
+                    self._is_thinking = False
+                    print(f"[SLEEP AGENT] ✅ Exited thinking mode")
+                else:
+                    yield {"type": "thinking", "delta": content}
+                    content = ""
+
     def _process_task(self, task: MemoryTask):
         """
         Processes a single memory task using the LLM and registered tools.
         This involves constructing a prompt, querying the LLM, and handling tool calls.
-
-        Args:
-            task (MemoryTask): The task to be processed.
         """
         print(f"Processing task created at {task.created_at}")
         
@@ -411,18 +472,33 @@ class SleepTimeAgent:
                 self.context, _ = ct.trim_context(self.context, SLEEP_AGENT_CONTEXT, system_messages=system_messages)
                 
                 # Query the LLM and process its streamed output chunks.
+                thinking_buffer = "" # Buffer to accumulate thinking content
                 for chunk in self.llm.query(system_messages + self.context):
                     chunk_type = chunk.get("type")
                     delta = chunk.get("delta")
                     
-                    if chunk_type == "content":
-                        res_for_assistant_message += delta
-                    elif chunk_type == "tool_call":
-                        tool_calls.append(delta)
-                    elif chunk_type == "error":
-                        print(f"LLM error: {delta}")
-                        reasoning_loop_active = False # Stop loop on LLM error
-                        break
+                    # Process the chunk through our thinking tag handler
+                    for processed_chunk in self._process_chunk(delta):
+                        processed_type = processed_chunk.get("type")
+                        processed_delta = processed_chunk.get("delta")
+                        
+                        if processed_type == "content":
+                            res_for_assistant_message += processed_delta
+                        elif processed_type == "thinking":
+                            # Print thinking content for every chunk (spam mode)
+                            print(f"[SLEEP AGENT] 🧠 Thinking chunk: {processed_delta[:50]}...")
+                            thinking_buffer += processed_delta
+                        elif chunk_type == "tool_call":
+                            tool_calls.append(processed_delta)
+                        elif chunk_type == "error":
+                            print(f"LLM error: {processed_delta}")
+                            reasoning_loop_active = False # Stop loop on LLM error
+                            break
+                
+                # Print accumulated thinking content if any
+                if thinking_buffer.strip():
+                    print(f"[SLEEP AGENT THINKING] {thinking_buffer.strip()}")
+                    thinking_buffer = "" # Reset buffer
                 
                 # Add the assistant's full response (content + tool calls) to the context.
                 assistant_message = {"role": "assistant", "content": res_for_assistant_message}
@@ -433,19 +509,35 @@ class SleepTimeAgent:
                 # Process any tool calls generated by the LLM.
                 if tool_calls:
                     print(f"Processing {len(tool_calls)} tool calls")
+                    
+                    # Check if finish_edits was called (completion signal)
+                    finish_called = any("finish_edits" in str(tool_call).lower() for tool_call in tool_calls)
+                    if finish_called:
+                        print("[SLEEP AGENT] 🎯 finish_edits tool called - task complete!")
+                        reasoning_loop_active = False
+                        # Still process the tool calls to get any final results
+                    
                     tool_results = self.handler.process_tool_calls(tool_calls)
                     
                     # Add tool results back to the context for the next LLM turn.
                     for tool_result in tool_results:
                         self.context.append({"role": "tool", "content": str(tool_result)})
                     
-                    if tool_results:
+                    if not finish_called and tool_results:
                         reasoning_loop_active = True  # Continue loop if tools were called and results obtained
                     else:
                         reasoning_loop_active = False # End loop if tools were called but no results (e.g., failed)
                 else:
-                    reasoning_loop_active = True  # Continue loop if no tools were called by the LLM, and warn it.
-                    self.context.append({"role": "user", "content": "[This is an automated system message hidden from the user] Please try again, no tools were called. If you are done making edits, call the finish_edits function."})
+                    # Check if the LLM indicated it's done (no tools called)
+                    if "finish_edits" in res_for_assistant_message.lower() or "task complete" in res_for_assistant_message.lower() or "done" in res_for_assistant_message.lower():
+                        print("[SLEEP AGENT] 🎯 LLM indicated task completion")
+                        reasoning_loop_active = False
+                    elif loop_count >= max_loops:
+                        print(f"[SLEEP AGENT] ⚠️  Reached max loops ({max_loops}), stopping")
+                        reasoning_loop_active = False
+                    else:
+                        # Give the LLM one more chance to call tools or indicate completion
+                        reasoning_loop_active = True
             
             print(f"Completed task created at {task.created_at}")
             
