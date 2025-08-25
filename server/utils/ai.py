@@ -15,7 +15,7 @@ class LLM:
     """
     A unified class for interacting with various large language models.
     """
-    def __init__(self, model: str, tools: Optional[List[Dict]] = None, max_tokens: int = 2048, temperature: float = 0.7):
+    def __init__(self, model: str, tools: Optional[List[Dict]] = None, max_tokens: int = 2048, temperature: float = 0.7, think_level: Optional[str] = None):
         print(f"[AI DEBUG] Initializing LLM with model: {model}")
         
         if "/" not in model:
@@ -27,6 +27,7 @@ class LLM:
         self.tools = tools
         self.max_tokens = max_tokens
         self.temperature = temperature
+        self.think_level = think_level  # Support for thinking models like deepseek-r1
         self._is_thinking = False
         
         print(f"[AI DEBUG] LLM initialized successfully")
@@ -126,6 +127,10 @@ class LLM:
                 "num_predict": self.max_tokens,
             }
         }
+        
+        # Add thinking support for compatible models 
+        if hasattr(self, 'think_level') and self.think_level:
+            params["think"] = self.think_level
         if self.tools:
             params["tools"] = self.tools
 
@@ -142,9 +147,9 @@ class LLM:
                     tool_calls = chunk["message"].get("tool_calls")
 
                     if content:
-                        # Process content directly without character splitting
-                        print(f"[AI DEBUG] Raw chunk from LLM: {{'type': 'content', 'delta': '{content}'}}")
-                        yield {"type": "content", "delta": content}
+                        # Process content through thinking tag processor
+                        print(f"[AI DEBUG] Raw chunk from LLM: '{content[:50]}{'...' if len(content) > 50 else ''}'")
+                        yield from self._process_chunk(content)
                     
                     if tool_calls:
                         for tool_call in tool_calls:
