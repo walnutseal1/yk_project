@@ -134,21 +134,31 @@ class LLM:
         
         try:
             from ollama import chat
+            from utils.ollama_optimizer import OllamaOptimizer
             print("[AI DEBUG] Ollama import successful")
         except ImportError as e:
             error_msg = "Ollama is not installed. Please run 'pip install ollama'."
             print(f"[AI DEBUG] Import error: {error_msg}")
             raise ImportError(error_msg)
 
+        # Apply BPE formatting and optimal options for main LLM
+        optimizer = OllamaOptimizer()
+        formatted_messages = optimizer.format_messages_with_bpe(messages)
+        optimal_options = optimizer.get_optimal_model_options("chat")
+        
+        print(f"[AI DEBUG] ⚡ Applied BPE formatting to {len(messages)} messages")
+        print(f"[AI DEBUG] ⚡ Using optimal model options: {list(optimal_options.keys())}")
+
         params = {
             "model": self.model_name,
-            "messages": messages,
+            "messages": formatted_messages,  # Use BPE formatted messages
             "stream": True,
-            "options": {
-                "temperature": self.temperature,
-                "num_predict": self.max_tokens,
-            }
+            "options": optimal_options  # Use optimal options instead of basic ones
         }
+        
+        # Override with instance-specific settings
+        params["options"]["temperature"] = self.temperature
+        params["options"]["num_predict"] = self.max_tokens
         
         # Add thinking support for compatible models 
         if hasattr(self, 'think_level') and self.think_level:
