@@ -535,4 +535,4 @@ def vector_get(query: str, top_n: int = 2) -> str:
     Returns:
         str: A formatted string of matching memories, or a not found message.
     """
-    return memory_search(query, topn=top_n, exclude="recall")
+    return memory_search(query, top_n=top_n, exclude="recall")
