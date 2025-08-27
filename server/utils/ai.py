@@ -3,6 +3,17 @@ import requests
 import json
 from typing import List, Dict, Optional, Iterator, Union
 
+# =============================================================================
+# OLLAMA PERFORMANCE OPTIMIZATIONS 
+# =============================================================================
+
+# Set optimal Ollama environment variables for consistent performance
+os.environ['OLLAMA_FLASH_ATTENTION'] = '1'           # Enable flash attention
+os.environ['OLLAMA_KV_CACHE_TYPE'] = 'f16'          # Full precision KV cache  
+os.environ['OLLAMA_NUM_PARALLEL'] = '2'             # Parallel requests
+os.environ['OLLAMA_MAX_LOADED_MODELS'] = '2'        # Allow multiple models
+os.environ['OLLAMA_KEEP_ALIVE'] = '10m'             # Keep models loaded
+
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -15,18 +26,30 @@ class LLM:
     """
     A unified class for interacting with various large language models.
     """
-    def __init__(self, model: str, tools: Optional[List[Dict]] = None, max_tokens: int = 2048, temperature: float = 0.7):
+    def __init__(self, model: str, tools: Optional[List[Dict]] = None, max_tokens: int = 2048, temperature: float = 0.7, think_level: Optional[str] = None):
         print(f"[AI DEBUG] Initializing LLM with model: {model}")
         
         if "/" not in model:
             raise ValueError("Model format must be 'provider/model_name'")
         
-        self.provider, self.model_name = model.split("/", 1)
+        # Split on first slash to get provider
+        self.provider, model_path = model.split("/", 1)
+        
+        # Special handling for Ollama models - preserve the full model path
+        if self.provider == "ollama":
+            # For Ollama, the model_path can contain additional slashes (e.g., hf.co/subsectmusic/model:tag)
+            # We need to preserve the full model path as Ollama expects it
+            self.model_name = model_path
+        else:
+            # For other providers, use the original split
+            self.model_name = model_path
+        
         print(f"[AI DEBUG] Provider: {self.provider}, Model: {self.model_name}")
         
         self.tools = tools
         self.max_tokens = max_tokens
         self.temperature = temperature
+        self.think_level = think_level  # Support for thinking models like deepseek-r1
         self._is_thinking = False
         
         print(f"[AI DEBUG] LLM initialized successfully")
@@ -111,21 +134,35 @@ class LLM:
         
         try:
             from ollama import chat
+            from utils.ollama_optimizer import OllamaOptimizer
             print("[AI DEBUG] Ollama import successful")
         except ImportError as e:
             error_msg = "Ollama is not installed. Please run 'pip install ollama'."
             print(f"[AI DEBUG] Import error: {error_msg}")
             raise ImportError(error_msg)
 
+        # Apply BPE formatting and optimal options for main LLM
+        optimizer = OllamaOptimizer()
+        formatted_messages = optimizer.format_messages_with_bpe(messages)
+        optimal_options = optimizer.get_optimal_model_options("chat")
+        
+        print(f"[AI DEBUG] ⚡ Applied BPE formatting to {len(messages)} messages")
+        print(f"[AI DEBUG] ⚡ Using optimal model options: {list(optimal_options.keys())}")
+
         params = {
             "model": self.model_name,
-            "messages": messages,
+            "messages": formatted_messages,  # Use BPE formatted messages
             "stream": True,
-            "options": {
-                "temperature": self.temperature,
-                "num_predict": self.max_tokens,
-            }
+            "options": optimal_options  # Use optimal options instead of basic ones
         }
+        
+        # Override with instance-specific settings
+        params["options"]["temperature"] = self.temperature
+        params["options"]["num_predict"] = self.max_tokens
+        
+        # Add thinking support for compatible models 
+        if hasattr(self, 'think_level') and self.think_level:
+            params["think"] = self.think_level
         if self.tools:
             params["tools"] = self.tools
 
@@ -142,8 +179,7 @@ class LLM:
                     tool_calls = chunk["message"].get("tool_calls")
 
                     if content:
-                        # Process content directly without character splitting
-                        print(f"[AI DEBUG] Raw chunk from LLM: {{'type': 'content', 'delta': '{content}'}}")
+                        # Process content directly without character splitting (original behavior)
                         yield {"type": "content", "delta": content}
                     
                     if tool_calls:
@@ -164,7 +200,7 @@ class LLM:
             print("[AI DEBUG] llama-cpp import successful")
         except ImportError:
             error_msg = "llama-cpp-python is not installed. Please run 'pip install llama-cpp-python'."
-            print(f"[AI DEBUG] Import error: {error_msg}")
+            print(f"[AI DEBUG] Error: {error_msg}")
             raise ImportError(error_msg)
 
         if self.tools:
@@ -450,14 +486,17 @@ def embed(model: str, message: str) -> list[float]:
     
     if "/" not in model:
         raise ValueError("Model format: 'provider/model'")
-    provider, model_name = model.split("/", 1)
+    
+    # Split on first slash to get provider
+    provider, model_path = model.split("/", 1)
     
     if provider == "ollama":
         try:
             import ollama
         except ImportError:
             raise ImportError("Install Ollama: pip install ollama")
-        result = ollama.embeddings(model=model_name, prompt=message)
+        # For Ollama, use the full model path (e.g., hf.co/subsectmusic/model:tag)
+        result = ollama.embeddings(model=model_path, prompt=message)
         return result["embedding"]
     
     elif provider == "llama-cpp":
@@ -465,10 +504,10 @@ def embed(model: str, message: str) -> list[float]:
             from llama_cpp import Llama
         except ImportError:
             raise ImportError("Install llama-cpp-python: pip install llama-cpp-python")
-        if model_name not in _llama_models:
-            print(f"Loading model: {model_name}")
-            _llama_models[model_name] = Llama(model_path=model_name, verbose=False, n_ctx=2048)
-        llm = _llama_models[model_name]
+        if model_path not in _llama_models:
+            print(f"Loading model: {model_path}")
+            _llama_models[model_path] = Llama(model_path=model_path, verbose=False, n_ctx=2048)
+        llm = _llama_models[model_path]
         return llm.embed(message)
         
     else:

@@ -19,7 +19,7 @@ os.environ['OLLAMA_KV_CACHE_TYPE'] = 'f16'          # Full precision KV cache
 os.environ['OLLAMA_NUM_PARALLEL'] = '2'             # Parallel requests
 os.environ['OLLAMA_MAX_LOADED_MODELS'] = '2'        # Allow multiple models
 os.environ['OLLAMA_KEEP_ALIVE'] = '10m'             # Keep models loaded
-os.environ['OLLAMA_HOST'] = '0.0.0.0:11434'        # Bind to all interfaces
+os.environ['OLLAMA_HOST'] = '127.0.0.1:11434'      # Local host binding
 
 class PerformanceMonitor:
     """Monitor system performance for dynamic optimization."""
@@ -303,6 +303,11 @@ class AsyncOllamaClient:
                 
                 if tools:
                     payload["tools"] = tools
+                    
+                # Add thinking support for compatible models
+                think_level = request_data.get("think_level")
+                if think_level:
+                    payload["think"] = think_level
                 
                 # Store response chunks for caching
                 response_chunks = []
@@ -360,7 +365,8 @@ class AsyncOllamaClient:
                          messages: List[Dict[str, str]], 
                          temperature: float = 0.7,
                          max_tokens: int = 2048,
-                         tools: Optional[List[Dict]] = None) -> AsyncIterator[Dict]:
+                         tools: Optional[List[Dict]] = None,
+                         think_level: Optional[str] = None) -> AsyncIterator[Dict]:
         """
         Stream chat completion with async processing.
         
@@ -386,6 +392,7 @@ class AsyncOllamaClient:
             "temperature": temperature,
             "max_tokens": max_tokens,
             "tools": tools,
+            "think_level": think_level,
             "response_queue": response_queue
         }
         
@@ -409,7 +416,8 @@ class AsyncLLM:
                  tools: Optional[List[Dict]] = None, 
                  max_tokens: int = 2048, 
                  temperature: float = 0.7,
-                 max_concurrent_requests: int = 5):
+                 max_concurrent_requests: int = 5,
+                 think_level: Optional[str] = None):
         
         if "/" not in model:
             raise ValueError("Model format must be 'provider/model_name'")
@@ -418,10 +426,12 @@ class AsyncLLM:
         self.tools = tools
         self.max_tokens = max_tokens
         self.temperature = temperature
+        self.think_level = think_level  # Support for thinking models like deepseek-r1
         
         # Initialize provider-specific clients
         self._clients = {}
         self._semaphore = asyncio.Semaphore(max_concurrent_requests)
+        self._is_thinking = False  # Track thinking tag state
         
     async def __aenter__(self):
         return self
@@ -464,7 +474,8 @@ class AsyncLLM:
                     messages=messages,
                     temperature=self.temperature,
                     max_tokens=self.max_tokens,
-                    tools=self.tools
+                    tools=self.tools,
+                    think_level=self.think_level
                 ):
                     # Process thinking tags if needed
                     if chunk.get("type") == "content":
@@ -479,9 +490,30 @@ class AsyncLLM:
         """Process content chunks, handling <think> tags."""
         if content is None:
             return
-            
-        # Simple implementation - extend as needed
-        yield {"type": "content", "delta": content}
+
+        while content:
+            if not self._is_thinking:
+                think_start = content.find("<think>")
+                if think_start != -1:
+                    # Yield content before the think tag
+                    if think_start > 0:
+                        yield {"type": "content", "delta": content[:think_start]}
+                    content = content[think_start + len("<think>"):]
+                    self._is_thinking = True
+                else:
+                    yield {"type": "content", "delta": content}
+                    content = ""
+            else: # We are in "thinking" mode
+                think_end = content.find("</think>")
+                if think_end != -1:
+                    # Yield thinking content
+                    if think_end > 0:
+                        yield {"type": "thinking", "delta": content[:think_end]}
+                    content = content[think_end + len("</think>"):]
+                    self._is_thinking = False
+                else:
+                    yield {"type": "thinking", "delta": content}
+                    content = ""
 
 
 # High-level async functions for easy usage

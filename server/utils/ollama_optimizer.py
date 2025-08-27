@@ -28,7 +28,7 @@ class OllamaOptimizer:
             'OLLAMA_NUM_PARALLEL': '2',             # Parallel processing
             'OLLAMA_MAX_LOADED_MODELS': '2',        # Keep multiple models
             'OLLAMA_KEEP_ALIVE': '10m',             # Keep models in memory
-            'OLLAMA_HOST': '0.0.0.0:11434',        # Bind to all interfaces
+            'OLLAMA_HOST': '127.0.0.1:11434',      # Local host binding
             'OLLAMA_MODELS': './models',            # Local model storage
             'OLLAMA_ORIGINS': '*',                  # Allow all origins
         }

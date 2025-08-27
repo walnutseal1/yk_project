@@ -9,6 +9,11 @@ import sys
 import os
 import time
 
+# Fix Windows console encoding for unicode support
+if os.name == 'nt':  # Windows
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+
 def main():
     print("🤖 AI Chat Interface Launcher")
     print("=" * 40)
@@ -33,14 +38,14 @@ def main():
         print("\nPlease make sure all files are in their respective directories.")
         return
     
-    print("✅ All required files found")
-    print("🚀 Starting processes...")
+    print("All required files found")
+    print("Starting processes...")
     print("=" * 40)
     
     launched_processes = []
     try:
         for script, cwd in processes_to_launch:
-            print(f"🚀 Starting {script} in {cwd}/...")
+            print(f"Starting {script} in {cwd}/...")
             process = subprocess.Popen([sys.executable, script], cwd=cwd)
             launched_processes.append((process, cwd))
         
@@ -49,7 +54,7 @@ def main():
             all_running = True
             for p, cwd in launched_processes:
                 if p.poll() is not None:  # Process has terminated
-                    print(f"🛑 A process ({p.args[1]} in {cwd}) has stopped. Terminating all others.")
+                    print(f"A process ({p.args[1]} in {cwd}) has stopped. Terminating all others.")
                     all_running = False
                     break
             
@@ -59,9 +64,9 @@ def main():
             time.sleep(1) # Check every second
 
     except KeyboardInterrupt:
-        print("\n🛑 Launcher stopped by user.")
+        print("\nLauncher stopped by user.")
     except Exception as e:
-        print(f"❌ An error occurred: {e}")
+        print(f"An error occurred: {e}")
     finally:
         print("=" * 40)
         print("Cleaning up processes...")

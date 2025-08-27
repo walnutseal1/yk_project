@@ -29,7 +29,7 @@ use_web: True
 use_filesystem: False
 
 # Sleep Time Agent Configs
-sleep_agent_model: ollama/hf.co/subsectmusic/qwriko3-4b-instruct-2507:Q4_K_M
+sleep_agent_model: ollama/qwen3:4b
 sleep_agent_context: 2048
 sleep_agent_message_trigger: 1
 sleep_agent_prompt_path: prompts/sleep_agent_prompt.txt

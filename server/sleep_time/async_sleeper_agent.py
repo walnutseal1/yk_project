@@ -424,6 +424,9 @@ class AsyncSleepTimeAgent:
                     
                     if chunk_type == "content":
                         res_for_assistant_message += delta
+                    elif chunk_type == "thinking":
+                        # Handle thinking chunks from models like deepseek-r1
+                        print(f"[ASYNC SLEEP AGENT THINKING] {delta}")
                     elif chunk_type == "tool_call":
                         tool_calls.append(delta)
                     elif chunk_type == "error":
